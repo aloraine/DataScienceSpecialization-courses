@@ -1,0 +1,535 @@
+---
+title: "Dimension Reduction explanation and commentary"
+author: "Ann Loraine, adapting code by Roger Peng"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    toc_collapsed: false
+    toc_depth: 3
+    theme: lumen
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+* * *
+
+# Introduction
+
+This Markdown document is based the Dimension Reduction chapter from Prof. Roger Pengs's course Exploratory Data Analysis.
+
+The goal of this Markdown is to explore using dimension reduction as a way to create images we can use to notice and explore biologically meaningful patterns in high-dimensional bioinformatics data sets, i.e., data with many variables and many observations. 
+
+The code is adapted from the file `index.Rmd` in folder `04_ExploratoryAnalysis/dimensionReduction` from [this github repository](https://github.com/aloraine/DataScienceSpecialization-courses), which is a fork of [this other github repository](https://github.com/DataScienceSpecialization/courses). 
+
+* * *
+
+# Analysis / Results
+
+## Make a matrix
+
+Create a matrix of random data:
+
+```{r}
+set.seed(12345)
+dataMatrix <- matrix(rnorm(400),nrow=40)
+```
+
+The preceding code chunk used `rnorm` to make `r length(dataMatrix)` values selected from the standard normal distribution. 
+
+Then, we organized the data into a matrix with:
+
+* `r nrow(dataMatrix)` rows
+* `r ncol(dataMatrix)` columns
+
+## Visualize the matrix
+
+Let's use the `head` command to view the first few rows of the matrix (`dataMatrix`) as text:
+
+```{r}
+head(dataMatrix)
+```
+
+Observe how the matrix rows have ten values each, one for each column.
+
+We can use `image` to make an image that represents the matrix. 
+
+This is a very basic visualization. Every value will be shown, but instead of reporting values as numerals, we represent the data as shades of yellow and red.
+
+```{r}
+image(dataMatrix)
+```
+
+The `image` command in the preceding chunk made an image that represents the data in the original matrix. 
+
+The image consists of a grid of tiles. Each tile represents a value from the matrix.
+
+Tiles are color-coded so that darker, redder colors represent larger values, and paler yellow colors represent lower values.
+
+Notice how the image looks like a 40-row, 10-column matrix tipped over on its long, left side.
+
+The image shows matrix columns as horizontal stripes and matrix rows as vertical stripes.
+
+This is a little weird because when R prints a matrix, it prints matrix rows one by one. Also, when we view a matrix in RStudio, rows are shown as horizontal and columns as vertical. The `image` command does not do that.
+
+This is because of how `image` works. 
+
+The `image` function takes a matrix and draws its first column of data (`dataMatrix[1,])` as a row on the bottom of the image. Next, it takes the second column of `dataMatrix` and draws that as the second row on top of the bottom row. And so on.
+
+This way of creating the image means that the tile in the bottom left corner of the image represents the first value in the first row of the matrix. It shows matrix cell `dataMatrix[1,1]` 
+
+Also, the tile immediately above it represents the second value in the first row of the matrix. It shows matrix cell `dataMatrix[1,2]` 
+
+And the tile on the right side of bottom left corner tile represents the first value in the second row. It shows matrix cell `dataMatrix[2,1]` 
+
+Note that the x and y axes labels are not showing anything meaningful here - we can ignore them for now. 
+
+Recall how color is showing the magnitudes of the values themselves. 
+
+For example, check how the fourth tile from the right on the third level up is a dark red color. That tile represents `dataMatrix[4,3]` and has value `r dataMatrix[4,3]`.
+
+Compare that to how the tile in the top left corner of the matrix is light yellow. That tile represents `dataMatrix[1,10]` and has value `r dataMatrix[1,10]`.
+
+## Visualize matrix data a little better
+
+The matrix `dataMatrix` has 10 columns and 40 rows. So, the image we made is basically a representation of that matrix, flipped over on its side. This is a quirk of the `image` command. It "fills in" tiles starting at the lower left corner and moving up from there, and across.
+
+Confusing? I think so!
+
+To see how this is working, lets make a new 40 row, 10 column matrix that repeats the same number in every row, starting with 1 in the first row, 2 in the next row, and so on:
+
+```{r}
+m = matrix(nrow=40,ncol=10)
+for (i in 1:40) {
+  for (j in 1:10) {
+    m[i,j] = i
+  }
+}
+head(m)
+```
+
+Visualize the data using `image`:
+
+```{r}
+image(m)
+```
+
+Notice the vertical stripes and how they get darker from left to right? This helps us recognize that we are seeing the rows of the matrix. That's because we know that the values in each subsequent row are larger than the values preceding them. 
+
+Let's make the first value of the matrix (`m[1,1]`) a large value so that it is easier to see where it's located in the image:
+
+```{r}
+m[1,1] = 25
+```
+
+Now, the first value of the first row is a lot bigger than the other values. 
+
+Let's look at the image again:
+
+```{r}
+image(m)
+```
+
+The top left value of the original matrix (`m[1,1]`) is getting drawn at the bottom left of the of the image. 
+
+It would be easier to mentally compare the matrix we see in RStudio to what we see in the image if the image were not showing the matrix on its side. That way, we can more easily look at the two matrix representations and compare them.
+
+Let's write a function that converts a matrix to an image that shows the matrix rows horizontally instead of vertically.
+
+Professor Peng's original Markdown showed us how to do this. Here is a function based on his work:
+
+```{r}
+image2 = function(a_matrix,...) {
+  num_rows = nrow(a_matrix)
+  num_cols = ncol(a_matrix)
+  image(1:num_cols,
+        1:num_rows,
+        t(a_matrix)[,num_rows:1],
+        yaxt="n",
+        ylab=paste(nrow(a_matrix),"rows"),
+        xlab=paste(ncol(a_matrix),"columns"),
+        ...)
+}
+```
+
+There's a lot going on here!
+
+First, note how `image2` the function `t`, which stands for transpose. 
+
+Transposing a matrix is an operation that takes an existing matrix and returns a new version of the same matrix, where rows are converted to columns, and columns converted to rows. 
+
+To understand how this works, let's make a smaller matrix and show its transpose.
+
+Make a simple matrix:
+
+```{r}
+simple_matrix = matrix(1:6,nrow=3,byrow=T)
+simple_matrix_transposed = t(simple_matrix)
+```
+
+Here is the original `simple_matrix`:
+
+```{r}
+simple_matrix
+```
+
+And here is `simple_matrix` transposed:
+
+```{r}
+simple_matrix_transposed
+```
+
+By drawing the transpose of the original matrix, Prof. Peng's function "hacks" the image function so that shows the rows from the matrix as rows in the image. Note how Prof. Peng's function also draws the last columns of the transposed matrix first, instead of last. This has the effect of drawing the last rows at the bottom of the image, from bottom to top. 
+
+Also, note the "..." argument. This "..." (ellipses) is a way of telling the R interpreter that if the user provides extra arguments, then those arguments should get passed as-is to the `image` function invocation in the body of the function.
+
+Let's look at matrix `m` drawn using our new better image function:
+
+```{r fig.height=6,fig.width=4}
+image2(m)
+```
+
+Also notice that now the x and y axis look better. The x axis reports column numbers. The y axis has no tic marks, just a label reminding us of the number of rows in the matrix.
+
+Now that we have a much better way to visualize the data, let's return to our original random matrix, and see how it looks with our new imaging function:
+
+```{r fig.height=5,fig.width=4}
+image2(dataMatrix)
+```
+
+Now ask yourself: Do you see any patterns here? Does the pattern of colored tiles in the image look random? 
+
+This was kind of a trick question because you already knew that the matrix has random data. So, the data should look random to you.
+
+## Add a pattern
+
+To illustrate how dimension reduction can find patterns in data, let's add a pattern to the random data matrix.
+
+```{r}
+set.seed(678910)
+for(i in 1:40){
+  # flip a coin
+  coinFlip <- rbinom(1,size=1,prob=0.5)
+  # if coin is heads add a common pattern to that row
+  if(coinFlip){
+    dataMatrix[i,] <- dataMatrix[i,] + rep(c(0,3),each=5)
+  }
+}
+```
+
+The preceding chunk selected around half of the rows at random and then added 3 to the last five values of the selected rows. 
+
+View how the newly modified `dataMatrix` looks:
+
+
+```{r fig.height=6,fig.width=4}
+image2(dataMatrix)
+```
+
+See how now some of the rows, but not all, have very dark red values on the right side of the image. 
+
+## Explosing patterns
+
+This next chunk sorts the rows according to their euclidean distance from each other, using the functions `dist` and `hclust`.
+
+Next, it sorts the rows of `dataMatrix` according to the ordering created by the `hclust` algorithm.
+
+```{r fig.height=12,fig.width=4 }
+hh <- hclust(dist(dataMatrix))
+dataMatrixOrdered <- dataMatrix[hh$order,]
+```
+
+Let's visualize the newly re-ordered matrix:
+
+```{r fig.height=6,fig.width=4}
+image2(dataMatrixOrdered)
+```
+
+The matrix `dataMatrixOrdered` is the same as `dataMatrix`, but its rows have been moved around relative to each other, so that rows with similar values are closer to each other than before. 
+
+Let's look at how the row means and column means look now that we've sorted the matrix in this way:
+
+```{r}
+plot(rowMeans(dataMatrixOrdered),40:1,,xlab="Row Mean",ylab="Row",pch=19)
+plot(colMeans(dataMatrixOrdered),xlab="Column",ylab="Column Mean",pch=19)
+```
+
+These two plots expose the pattern we created in a previous chunk. 
+
+* * *
+
+## Reducing dimensions
+
+A general problem or issue with data analysis is that often we have measured many more variables that we needed to in order to answer questions about biological processes. This happens sometimes when variables are highly correlated with each other. For example, a person's height and weight are often correlated, meaning: taller people weight more than shorter people, who weight less.
+
+Imagine a situation where you have a lot of variables, let's call them $X_1,\ldots,X_n$ so $X_1 = (X_{11},\ldots,X_{1m})$
+
+In this situation, dimension reduction can have two goals or tasks:
+
+* Task 1: Find a new set of multivariate variables that are uncorrelated and explain or capture as much variance as possible. 
+
+This can be useful for reducing noise in a large matrix of experimental data, like what you get from a single-cell RNA-Seq experiment. 
+
+For example, you might look for the combination of features (genes) that vary together and could be "reduced" or transformed into a new variable that combines all of them. Doing this could allow you to eliminate variables (genes) that are "noisy" and don't contribute to patterns in the data. By keeping just the genes that matter, you could expose more of the biological signal embedded in the data. 
+
+* Task 2: If you put all the variables together in one matrix, find the best matrix created with fewer variables (lower rank) that "explains" the original data. This is useful for data compression, e.g., getting rid of noise for the purpose to making the data representation more compact. 
+
+Prof. Peng notes that the first task is <font color="#330066">statistical</font> and the second goal is <font color="#993300">data compression</font>.
+
+* * *
+
+## PCA and SVD
+
+__SVD__
+
+SVD stands for "Singular value decomposition". It's a technique for expressing a matrix as a product of three other matrices, called U, D and V.
+
+As explained by Prof. Peng:
+
+If $X$ is a matrix with each variable in a column and each observation in a row then the SVD is a "matrix decomposition"
+
+$$ X = UDV^T$$
+
+where the columns of $U$ are orthogonal (left singular vectors), the columns of $V$ are orthogonal (right singular vectors) and $D$ is a diagonal matrix (singular values). 
+
+The equation above expresses the idea that if you multiply U by D, and then multiply their product by the transpose of V, you'll get X back. 
+
+__PCA__
+
+PCA stands for Principle Components Analysis. It's a variation of SVD where you first scale all the variables. 
+
+The principal components are equal to the right singular values if you first scale (subtract the mean, divide by the standard deviation) the variables.
+
+* * *
+
+## Components of the SVD - $u$ and $v$
+
+R has a function `svd` that produces the three matrices U, D, and V.
+
+Let's use it on `dataMatrixOrdered`:
+
+```{r fig.height=4,fig.width=12}
+scaled.dataMatrixOrdered = scale(dataMatrixOrdered)
+svd1 <- svd(scaled.dataMatrixOrdered)
+```
+
+The object `svd1` is a S3 object with several named parts. We can find out the names using `names`:
+
+```{r}
+names(svd1)
+```
+
+Let's investigate the parts, or components.
+
+* `svd1$u` is a matrix with `r nrow(svd1$u)` rows and `r ncol(svd1$u)` columns
+* `svd1$v` is a matrix with `r nrow(svd1$v)` rows and `r ncol(svd1$v)` columns
+* `svd1$d` is a vector with `r length(svd1$d)` that represents the diagonal of a matrix with zeroes in every position except the diagonal 
+
+Let's check if we can recover the original matrix by combining the components.
+
+```{r}
+recovered = svd1$u %*% diag(svd1$d) %*% t(svd1$v)
+matched = sum(round(recovered,5)==round(scaled.dataMatrixOrdered,5))
+```
+
+How many values matched? `r 400`.
+
+Now, to explain some terminology!
+
+The columns of the `u` component are called the first, second, third, etc. left singular vectors.
+
+The columns of the `v` component are called the first, second, third, etc. right singular vectors.
+
+The values in the vector `d` are called the singular values. 
+
+Let's visualize them, together with the original (non-scaled) data matrix.
+
+```{r fig.height=12,fig.width=6}
+par(mfrow=c(1,3))
+image2(dataMatrixOrdered)
+plot(svd1$u[,1],40:1,,xlab="Row",ylab="First left singular vector",pch=19)
+plot(svd1$v[,1],xlab="Column",ylab="First right singular vector",pch=19)
+par(mfrow=c(1,1))
+```
+
+The preceding plots show how the pattern we observed in the original matrix is reflected in the spread of the singular vectors from the two components. Notice how the darker red section of the first image exposes rows and columns that have the highest within-row or within-column variance. The lower rows, however, have more similar colors and less variance. 
+
+* * *
+
+## Components of the SVD - Variance explained
+
+The values in the `d` component (the singular values) report the amount of variance explained by the singular vectors in the other two components.
+
+They always sorted, such that the first singular value explains more variance than the second, which explains more than the third, and so on. 
+
+```{r fig.height=4,fig.width=6}
+par(mfrow=c(1,2))
+plot(svd1$d,xlab="Column",ylab="Singular value",pch=19)
+plot(svd1$d^2/sum(svd1$d^2),xlab="Column",ylab="Prop. of variance explained",pch=19)
+par(mfrow=c(1,1))
+```
+
+The preceding plots shows how much variance is explained by the singular vectors. 
+
+The first plot present the variances themselves, and the second plot shows the variances as percentages. 
+
+* * *
+
+## Relationship to principal components
+
+Principal components analysis is equivalent to singular value decomposition that starts with a scaled matrix.
+
+In R, we can use function `prcomp` to perform principle components analysis of a matrix.
+
+```{r fig.height=5,fig.width=5}
+pca1 <- prcomp(dataMatrixOrdered,scale=TRUE)
+plot(pca1$rotation[,1],svd1$v[,1],pch=19,xlab="Principal Component 1",ylab="Right Singular Vector 1")
+abline(c(0,1))
+```
+
+The preceding plot compares the first principle component (from `pcal$rotation`) returned by `prcomp` to the first right singular vector from the preceding singular value decomposition. 
+
+The values are the same. 
+
+* * *
+
+## Components of the SVD - variance explained
+
+```{r fig.height=4,fig.width=12,tidy=FALSE}
+constantMatrix <- dataMatrixOrdered*0
+for(i in 1:dim(dataMatrixOrdered)[1]){constantMatrix[i,] <- rep(c(0,1),each=5)}
+svd1 <- svd(constantMatrix)
+par(mfrow=c(1,3))
+image2(constantMatrix)
+plot(svd1$d,xlab="Column",ylab="Singular value",pch=19)
+plot(svd1$d^2/sum(svd1$d^2),xlab="Column",ylab="Prop. of variance explained",pch=19)
+par(mfrow=c(1,1))
+```
+
+* * *
+
+## What if we add a second pattern?
+
+```{r fig.height=4,fig.width=3}
+set.seed(678910)
+for(i in 1:40){
+  # flip a coin
+  coinFlip1 <- rbinom(1,size=1,prob=0.5)
+  coinFlip2 <- rbinom(1,size=1,prob=0.5)
+  # if coin is heads add a common pattern to that row
+  if(coinFlip1){
+    dataMatrix[i,] <- dataMatrix[i,] + rep(c(0,5),each=5)
+  }
+  if(coinFlip2){
+    dataMatrix[i,] <- dataMatrix[i,] + rep(c(0,5),5)
+  }
+}
+hh <- hclust(dist(dataMatrix))
+dataMatrixOrdered <- dataMatrix[hh$order,]
+```
+
+The preceding chunk adds yet another pattern. How will this new pattern change the SVD? 
+
+Let's find out:
+
+```{r fig.height=4.5,fig.width=12}
+svd2 <- svd(scale(dataMatrixOrdered))
+par(mfrow=c(1,3))
+image2(dataMatrixOrdered)
+plot(svd2$v[,1],pch=19,xlab="Column",ylab="First right singular vector")
+plot(svd2$v[,2],pch=19,xlab="Column",ylab="Second right singular vector")
+par(mfrow=c(1,1))
+```
+
+Now, it looks like the first singular vector is picking up differences between adjacent columns, whereas the second singular vector is detecting the division between the right and left half of the image. 
+
+* * *
+
+##  $d$ and variance explained
+
+```{r fig.height=4,fig.width=8}
+par(mfrow=c(1,2))
+plot(svd2$d,xlab="Column",ylab="Singular value",pch=19)
+plot(svd2$d^2/sum(svd2$d^2),xlab="Column",ylab="Percent of variance explained",pch=19)
+par(mfrow=c(1,1))
+```
+
+Compare this plot to the plot for `svd1`. Here, more singular values explain more of the variation.
+
+* * *
+
+## Data compression: Face example
+
+<!-- ## source("http://dl.dropbox.com/u/7710864/courseraPublic/myplclust.R") -->
+
+Let's load a digitized image of a person's face.
+
+```{r fig.height=6,fig.width=6}
+load("data/face.rda")
+image2(faceData)
+```
+
+Now, let's use the `svd` function to decompose the matrix of data:
+
+```{r fig.height=5,fig.width=6}
+svd1 <- svd(scale(faceData))
+plot(svd1$d^2/sum(svd1$d^2),pch=19,xlab="Singular vector",ylab="Variance explained")
+```
+
+By looking at the amount of variance explained by the values in the right singular vector, we can make a new matrix that uses less data to create a recognizable image.
+
+## Face example - create approximations
+
+```{r approximations,dependson="loadFaceData",fig.height=4,fig.width=4}
+
+svd1 <- svd(scale(faceData))
+## Note that %*% is matrix multiplication
+
+# Here svd1$d[1] is a constant
+approx1 <- svd1$u[,1] %*% t(svd1$v[,1]) * svd1$d[1]
+
+# In these examples we need to make the diagonal matrix out of d
+approx5 <- svd1$u[,1:5] %*% diag(svd1$d[1:5])%*% t(svd1$v[,1:5]) 
+approx10 <- svd1$u[,1:10] %*% diag(svd1$d[1:10])%*% t(svd1$v[,1:10]) 
+```
+
+* * *
+
+## Face example - plot approximations
+
+```{r fig.height=10,fig.width=6}
+par(mfrow=c(2,2))
+image2(approx1, main = "1 principal component")
+image2(approx5, main = "5 principal components")
+image2(approx10, main = "10 principal component")
+image2(faceData, main = "Original image")
+par(mfrow=c(1,1))
+```
+
+
+---
+
+## Notes and further resources
+
+* Scale matters
+* PC's/SV's may mix real patterns
+* Can be computationally intensive
+* [Advanced data analysis from an elementary point of view](http://www.stat.cmu.edu/~cshalizi/ADAfaEPoV/ADAfaEPoV.pdf)
+* [Elements of statistical learning](http://www-stat.stanford.edu/~tibs/ElemStatLearn/)
+* Alternatives
+  * [Factor analysis](http://en.wikipedia.org/wiki/Factor_analysis)
+  * [Independent components analysis](http://en.wikipedia.org/wiki/Independent_component_analysis)
+  * [Latent semantic analysis](http://en.wikipedia.org/wiki/Latent_semantic_analysis)
+
+
+
+
+
+
+
+
+
